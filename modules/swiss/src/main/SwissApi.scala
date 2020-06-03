@@ -12,7 +12,7 @@ import scala.util.chaining._
 import lila.chat.Chat
 import lila.common.{ Bus, GreatPlayer, LightUser }
 import lila.db.dsl._
-import lila.game.Game
+import lila.game.{ Game, Pov }
 import lila.hub.LightTeam.TeamID
 import lila.round.actorApi.round.QuietFlag
 import lila.user.{ User, UserRepo }
@@ -256,6 +256,28 @@ final class SwissApi(
       }
     }
 
+  def gameView(pov: Pov): Fu[Option[GameView]] =
+    (pov.game.swissId.map(Swiss.Id.apply) ?? byId) flatMap {
+      _ ?? { swiss =>
+        getGameRanks(swiss, pov.game) dmap {
+          GameView(swiss, _).some
+        }
+      }
+    }
+
+  private def getGameRanks(swiss: Swiss, game: Game): Fu[Option[GameRanks]] =
+    ~ {
+      game.whitePlayer.userId.ifTrue(swiss.isStarted) flatMap { whiteId =>
+        game.blackPlayer.userId map { blackId =>
+          rankingApi(swiss) map { ranking =>
+            ranking.get(whiteId) |@| ranking.get(blackId) apply {
+              case (whiteR, blackR) => GameRanks(whiteR, blackR)
+            }
+          }
+        }
+      }
+    }
+
   private[swiss] def kickFromTeam(teamId: TeamID, userId: User.ID) =
     colls.swiss.secondaryPreferred
       .primitive[Swiss.Id]($doc("teamId" -> teamId, "featurable" -> true), "_id")
@@ -268,9 +290,46 @@ final class SwissApi(
           )
         }
       }
-      .flatMap {
-        _.map { withdraw(_, userId) }.sequenceFu
+      .flatMap { kickFromSwissIds(userId, _) }
+
+  private[swiss] def kickLame(userId: User.ID) =
+    Bus
+      .ask[List[TeamID]]("teamJoinedBy")(lila.hub.actorApi.team.TeamIdsJoinedBy(userId, _))
+      .flatMap { teamIds =>
+        colls.swiss.aggregateList(100) { framework =>
+          import framework._
+          Match($doc("teamId" $in teamIds, "featurable" -> true)) -> List(
+            PipelineOperator(
+              $doc(
+                "$lookup" -> $doc(
+                  "as"   -> "player",
+                  "from" -> colls.player.name,
+                  "let"  -> $doc("s" -> "$_id"),
+                  "pipeline" -> $arr(
+                    $doc(
+                      "$match" -> $doc(
+                        "$expr" -> $doc(
+                          "$and" -> $arr(
+                            $doc("$eq" -> $arr("$u", userId)),
+                            $doc("$eq" -> $arr("$s", "$$s"))
+                          )
+                        )
+                      )
+                    )
+                  )
+                )
+              )
+            ),
+            Match("player" $ne $arr()),
+            Project($id(true))
+          )
+        }
       }
+      .map(_.flatMap(_.getAsOpt[Swiss.Id]("_id")))
+      .flatMap { kickFromSwissIds(userId, _) }
+
+  private def kickFromSwissIds(userId: User.ID, swissIds: Seq[Swiss.Id]): Funit =
+    swissIds.map { withdraw(_, userId) }.sequenceFu.void
 
   def withdraw(id: Swiss.Id, userId: User.ID): Funit =
     Sequencing(id)(notFinishedById) { swiss =>

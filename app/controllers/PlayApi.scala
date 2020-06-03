@@ -38,7 +38,10 @@ final class PlayApi(
             case _ =>
               env.user.repo.setBot(me) >>
                 env.pref.api.setBot(me) >>-
-                env.user.lightUserApi.invalidate(me.id) pipe toResult
+                env.user.lightUserApi.invalidate(me.id) pipe
+                toResult recover {
+                case lila.base.LilaInvalid(msg) => BadRequest(jsonError(msg))
+              }
           }
         case _ => impl.command(me, cmd)(WithPovAsBot)
       }
@@ -53,9 +56,8 @@ final class PlayApi(
 
   def boardMove(id: String, uci: String, offeringDraw: Option[Boolean]) =
     Scoped(_.Board.Play) { _ => me =>
-      WithPovAsBoard(id, me) { pov =>
-        env.slack.api.boardApiMove(pov.fullId, me)
-        impl.move(me, pov, uci, offeringDraw)
+      WithPovAsBoard(id, me) {
+        impl.move(me, _, uci, offeringDraw)
       }
     }
 

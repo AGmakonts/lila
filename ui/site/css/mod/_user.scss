@@ -10,16 +10,16 @@
 }
 
 #mz_actions { order: 1 }
-#mz_sitdccounter { order: 2; flex: 1 1 auto; }
-#mz_roles { order: 3; flex: 1 1 auto; }
+#mz_roles { order: 2; flex: 1 1 auto; }
+#mz_sitdccounter { order: 3; flex: 1 1 auto; }
 #mz_preferences { order: 4; flex: 1 1 auto; }
 #mz_plan { order: 5; flex: 1 1 auto; }
 #mz_irwin { order: 6 }
 #mz_assessments { order: 7 }
 #mz_mod_log { order: 8 }
 #mz_reports { order: 9 }
-#mz_others { order: 10 }
-#mz_identification { order: 11 }
+#mz_identification { order: 10 }
+#mz_others { order: 11 }
 
 #mz_menu {
   @extend %flex-center, %box-neat-top;
@@ -98,45 +98,54 @@
   border-left: 3px solid rgba(56,147,232,0.8)!important;
 }
 .mod-zone time {
-  opacity: 0.7;
+  opacity: .7;
+  white-space: nowrap;
 }
 .mod-zone form {
   display: inline;
 }
 #mz_identification {
+  @extend %flex-wrap;
   > div {
-    max-height: 20em;
+    flex: 1 1 33.33%;
+    max-height: 40vh;
     overflow: auto;
+    &:last-child {
+      margin: 0;
+    }
   }
-  .spy_ips {
-    float: left;
-    margin-left: 1%;
-    width: 31%;
-    > ul > li {
-      list-style: inside disc;
+  .slist {
+    tbody td {
+      padding: 0;
+      &:first-child {
+        padding-left: 1em;
+        width: 0%;
+      }
     }
-    ul p {
+    thead th:first-child {
       font-weight: bold;
-      display: inline;
     }
-    li li {
-      margin-left: 1em;
+    white-space: nowrap;
+    a {
       font-family: monospace;
     }
+    .blocked {
+      a, .button { color: $c-bad; }
+    }
+    i {
+      margin-left: 1ch;
+    }
+    tr:hover {
+      background: mix($c-brag, $c-bg-box, 20%);
+    }
+  }
+  .spy_ips a {
+    letter-spacing: -1px;
   }
   .spy_uas {
-    margin-left: 34%;
-  }
-  .spy_fps {
-    margin-left: 34%;
-    max-height: 8em;
-    li {
-      font-family: monospace;
-    }
-  }
-  .blocked {
-    color: red;
-    font-weight: bold;
+    padding-left: 1em;
+    white-space: wrap;
+    max-height: 20vh;
   }
 }
 .mod-zone .proxy {
@@ -179,14 +188,18 @@
     flex: 1 0 50ch;
     max-height: 50vh;
     overflow-y: auto;
+    &:first-child {
+      margin-right: 1em;
+    }
   }
   form {
     display: block;
-    padding: 0 10px;
+    > .user-link {
+    }
   }
   button {
+    white-space: nowrap;
     padding: 0;
-    margin-left: -2px;
     &:not(:hover) {
       border-color: transparent;
       background: transparent;
@@ -288,15 +301,8 @@
     .title img {
       height: 50px;
       width: 50px;
-      opacity: 0.9;
+      opacity: .7;
       margin-right: 8px;
-    }
-    @keyframes brain-glow {
-      20% { transform: scale(0.95); }
-      45% { transform: scale(1); }
-    }
-    .title img {
-      animation: brain-glow 1.5s ease-in-out infinite;
     }
     .infos {
       font-size: .9em;
@@ -388,4 +394,8 @@
 #mz_mod_log {
   max-height: 50vh;
   overflow-y: auto;
+}
+
+#main-wrap.very-long {
+  margin-bottom: 100vh;
 }

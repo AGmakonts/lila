@@ -11,7 +11,6 @@ import lila.user.User
 final class GarbageCollector(
     userSpy: UserSpyApi,
     ipTrust: IpTrust,
-    printBan: PrintBan,
     slack: lila.slack.SlackApi,
     noteApi: lila.user.NoteApi,
     isArmed: () => Boolean
@@ -53,16 +52,16 @@ final class GarbageCollector(
     data match {
       case ApplyData(user, ip, email, req) =>
         for {
-          spy    <- userSpy(user)
+          spy    <- userSpy(user, 300)
           ipSusp <- ipTrust.isSuspicious(ip)
         } yield {
           val printOpt = spy.prints.headOption
           logger.debug(s"apply ${data.user.username} print=${printOpt}")
           Bus.publish(
-            lila.security.UserSignup(user, email, req, printOpt.map(_.value), ipSusp),
+            lila.security.UserSignup(user, email, req, printOpt.map(_.fp.value), ipSusp),
             "userSignup"
           )
-          printOpt.map(_.value) filter printBan.blocks match {
+          printOpt.filter(_.banned).map(_.fp.value) match {
             case Some(print) => collect(user, email, ipBan = false, msg = s"Print ban: ${print.value}")
             case _ =>
               badOtherAccounts(spy.otherUsers.map(_.user)) ?? { others =>
@@ -84,8 +83,8 @@ final class GarbageCollector(
         }
     }
 
-  private def badOtherAccounts(accounts: Set[User]): Option[List[User]] = {
-    val others = accounts.toList
+  private def badOtherAccounts(accounts: List[User]): Option[List[User]] = {
+    val others = accounts
       .sortBy(-_.createdAt.getSeconds)
       .takeWhile(_.createdAt.isAfter(DateTime.now minusDays 10))
       .take(4)

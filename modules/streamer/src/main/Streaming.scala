@@ -104,7 +104,7 @@ final private class Streaming(
       }
       val futureTwitchStreamers: Fu[List[Streamer.Twitch]] =
         if (allTwitchStreamers.size > maxIds)
-          api.mostRecentlySeenIds(allTwitchStreamers.map(_._1), maxIds) map { ids =>
+          api.priorityDetection(allTwitchStreamers.view.map(_._1).toSet, maxIds) map { ids =>
             allTwitchStreamers collect {
               case (streamerId, twitch) if ids(streamerId) => twitch
             }
@@ -134,10 +134,10 @@ final private class Streaming(
                       )
                     )
                   case JsError(err) =>
-                    fufail(s"twitch ${res.status} $err ${~res.body.linesIterator.toList.headOption}")
+                    fufail(s"twitch ${res.status} $err ${res.body.linesIterator.take(1)}")
                 }
               case res =>
-                fufail(s"twitch ${res.status} ${~res.body.linesIterator.toList.headOption}")
+                fufail(s"twitch ${res.status} ${res.body.linesIterator.take(1)}")
             }
             .monSuccess(_.tv.streamer.twitch)
             .recover {

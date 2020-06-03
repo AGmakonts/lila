@@ -106,6 +106,11 @@ final class Env(
     text =
       "Secret tokens that allows fetching ongoing games without the 3-moves delay. Separated by commas.".some
   )
+  lazy val featuredTeamsSetting = memo.settingStore[Strings](
+    "featuredTeams",
+    default = Strings(Nil),
+    text = "Team IDs that always get their tournaments visible on /tournament".some
+  )
 
   lazy val preloader     = wire[mashup.Preload]
   lazy val socialInfo    = wire[mashup.UserInfo.SocialApi]
@@ -140,7 +145,7 @@ final class Env(
       _          <- tournament.api.withdrawAll(u)
       _          <- plan.api.cancel(u).nevermind
       _          <- lobby.seekApi.removeByUser(u)
-      _          <- security.store.disconnect(u.id)
+      _          <- security.store.closeAllSessionsOf(u.id)
       _          <- push.webSubscriptionApi.unsubscribeByUser(u)
       _          <- streamer.api.demote(u.id)
       _          <- coach.api.remove(u.id)

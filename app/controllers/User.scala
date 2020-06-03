@@ -334,6 +334,8 @@ final class User(
         import html.user.{ mod => view }
         import lila.app.ui.ScalatagsExtensions.LilaFragZero
 
+        val nbOthers = getInt("nbOthers") | 100
+
         val modLog = env.mod.logApi.userHistory(user.id).map(view.modLog)
 
         val plan = env.plan.api.recentChargesOf(user).map(view.plan).dmap(~_)
@@ -345,28 +347,28 @@ final class User(
           }
           .map(view.reportLog(user))
 
-        val prefs = env.pref.api.getPref(user).map(view.prefs)
+        val prefs = env.pref.api.getPref(user) map view.prefs(user)
 
         val rageSit = env.playban.api.getRageSit(user.id).map(view.showRageSit)
 
         val actions = env.user.repo.isErased(user) map { erased =>
           html.user.mod.actions(user, emails, erased)
         }
-        val spyFu = env.security.userSpy(user)
+        val spyFu = env.security.userSpy(user, nbOthers)
         val others = spyFu flatMap { spy =>
           val familyUserIds = user.id :: spy.otherUserIds.toList
           (isGranted(_.ModNote) ?? env.user.noteApi
             .forMod(familyUserIds)
             .logTimeIfGt(s"$username noteApi.forMod", 2 seconds)) zip
             env.playban.api.bans(familyUserIds).logTimeIfGt(s"$username playban.bans", 2 seconds) zip
-            lila.security.UserSpy.withMeSortedWithEmails(env.user.repo, user, spy.otherUsers) map {
+            lila.security.UserSpy.withMeSortedWithEmails(env.user.repo, user, spy) map {
             case notes ~ bans ~ othersWithEmail =>
-              html.user.mod.otherUsers(user, spy, othersWithEmail, notes, bans)
+              html.user.mod.otherUsers(user, spy, othersWithEmail, notes, bans, nbOthers)
           }
         }
         val identification = spyFu map { spy =>
           (isGranted(_.Doxing) || (user.lameOrAlt && !user.hasTitle)) ??
-            html.user.mod.identification(spy, env.security.printBan.blocks)
+            html.user.mod.identification(spy)
         }
         val irwin = env.irwin.api.reports.withPovs(user) map {
           _ ?? { reps =>
@@ -519,12 +521,12 @@ final class User(
                 ctx.me.ifTrue(getBool("friend")) match {
                   case Some(follower) =>
                     env.relation.api.searchFollowedBy(follower, term, 10) flatMap {
-                      case Nil     => env.user.repo userIdsLike term
+                      case Nil     => env.user.cached userIdsLike term
                       case userIds => fuccess(userIds)
                     }
                   case None if getBool("teacher") =>
                     env.user.repo.userIdsLikeWithRole(term, lila.security.Permission.Teacher.dbKey)
-                  case None => env.user.repo userIdsLike term
+                  case None => env.user.cached userIdsLike term
                 }
             }
           } flatMap { userIds =>

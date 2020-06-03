@@ -1,35 +1,41 @@
 var tablesort = require('tablesort');
 
-function streamLoad(opts) {
-  let source = new EventSource(opts.url);
+let $toggle = $('.user-show .mod-zone-toggle');
+let $zone = $('.user-show .mod-zone');
+let nbOthers = 50;
+
+function streamLoad() {
+  const source = new EventSource($toggle.attr('href') + '?nbOthers=' + nbOthers);
+  const callback = lichess.debounce(() => userMod($zone), 300);
   source.addEventListener('message', e => {
     if (!e.data) return;
-    opts.node.innerHTML += e.data;
-    opts.callback();
+    const html = $('<output>').append($.parseHTML(e.data));
+    html.find('.mz-section').each(function() {
+      const prev = $('#' + this.id);
+      if (prev.length) prev.replaceWith($(this));
+      else $zone.append($(this).clone());
+    });
+    callback();
   });
   source.onerror = () => source.close();
 }
 
-let $toggle = $('.user-show .mod-zone-toggle');
-let $zone = $('.user-show .mod-zone');
-
 function loadZone() {
   $zone.html(lichess.spinnerHtml).removeClass('none');
-  $('#main-wrap').addClass('full-screen-force');
+  $('#main-wrap').addClass('full-screen-force very-long');
   $zone.html('');
-  streamLoad({
-    node: $zone[0],
-    url: $toggle.attr('href'),
-    callback: lichess.debounce(() => userMod($zone), 300)
-  });
+  streamLoad();
   window.addEventListener('scroll', onScroll);
   scrollTo('.mod-zone');
 }
 function unloadZone() {
   $zone.addClass('none');
-  $('#main-wrap').removeClass('full-screen-force');
+  $('#main-wrap').removeClass('full-screen-force very-long');
   window.removeEventListener('scroll', onScroll);
   scrollTo('#top');
+}
+function reloadZone() {
+  streamLoad();
 }
 
 function scrollTo(el) {
@@ -49,47 +55,68 @@ function userMod($zone) {
   $('#mz_menu > a:not(.available)').each(function() {
     $(this).toggleClass('available', !!$($(this).attr('href')).length);
   });
-  $('#mz_menu > a:not(.hotkey)').each(function(i) {
-    const id = this.href.replace(/.+(#\w+)$/, '$1'), n = '' + (i + 1);
-    $(this).addClass('hotkey').prepend(`<i>${n}</i>`);
-    Mousetrap.bind(n, () => {
-      console.log(id, n);
-      scrollTo(id);
-    });
-  });
-
-  $zone.find('form.xhr:not(.ready)').submit(function() {
-    $(this).addClass('ready').find('input').attr('disabled', true);
-    $.ajax({
-      ...lichess.formAjax($(this)),
-      success: function(html) {
-        $('#mz_actions').replaceWith(html);
-        userMod($zone);
-      }
-    });
-    return false;
-  });
-
-  $zone.find('form.fide_title select').on('change', function() {
-    $(this).parent('form').submit();
-  });
-
-  var $modLog = $zone.find('#mz_mod_log ul').children();
-
-  if ($modLog.length > 20) {
-    var list = $modLog.slice(20);
-    list.addClass('modlog-hidden').hide()
-      .first().before('<a id="modlog-show">Show all ' + $modLog.length + ' mod log entries...</a>');
-      $zone.find('#modlog-show').click(function() {
-        $zone.find('.modlog-hidden').show();
-        $(this).remove();
+  makeReady('#mz_menu', el => {
+    $(el).find('a').each(function(i) {
+      const id = this.href.replace(/.+(#\w+)$/, '$1'), n = '' + (i + 1);
+      $(this).prepend(`<i>${n}</i>`);
+      Mousetrap.bind(n, () => {
+        console.log(id, n);
+        scrollTo(id);
       });
-  }
-
-  $zone.find('#mz_others table').each(function() {
-    tablesort(this, {
-      descending: true
     });
+  });
+
+  makeReady('form.xhr', el => {
+    $(el).submit(() => {
+      $(el).addClass('ready').find('input').attr('disabled', true);
+      $.ajax({
+        ...lichess.formAjax($(el)),
+        success: function(html) {
+          $('#mz_actions').replaceWith(html);
+          userMod($zone);
+        }
+      });
+      return false;
+    });
+  });
+
+  makeReady('form.fide_title select', el => {
+    $(el).on('change', function() {
+      $(el).parent('form').submit();
+    });
+  });
+
+  makeReady('#mz_others table', el =>
+    tablesort(el, { descending: true })
+  );
+  makeReady('#mz_identification table', el => {
+    tablesort(el, { descending: true });
+    $(el).find('.button').click(function() {
+      $.post($(this).attr('href'));
+      $(this).parent().parent().toggleClass('blocked');
+      return false;
+    });
+    $(el).find('tr').on('mouseenter', function() {
+      const v = $(this).find('td:first').text();
+      $('#mz_others tbody tr').each(function() {
+        $(this).toggleClass('none', !($(this).data('tags') || '').includes(v));
+      });
+    });
+    $(el).on('mouseleave', function() {
+      $('#mz_others tbody tr').removeClass('none');
+    });
+  });
+  makeReady('#mz_others .more-others', el => {
+    $(el).addClass('.ready').click(() => {
+      nbOthers = 1000;
+      reloadZone();
+    });
+  });
+}
+
+function makeReady(selector, f) {
+  $zone.find(selector + ':not(.ready)').each(function(i) {
+    f($(this).addClass('ready')[0], i);
   });
 }
 
